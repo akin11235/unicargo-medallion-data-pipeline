@@ -1,0 +1,39 @@
+# This is a Databricks asset bundle definition for unicargo_dab.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: unicargo_dab
+  uuid: 95ef5018-3fbe-47e3-8436-3f79d6017da1
+
+include:
+  - resources/*.yml
+  - resources/*/*.yml
+
+variables:
+  catalog:
+    default: "unikargo_dev"
+
+targets:
+  dev:
+    # The default target uses 'mode: development' to create a development copy.
+    # - Deployed resources get prefixed with '[dev my_user_name]'
+    # - Any job schedules and triggers are paused by default.
+    # See also https://docs.databricks.com/dev-tools/bundles/deployment-modes.html.
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-2560271708754576.16.azuredatabricks.net/
+
+  test:
+    mode: production
+    variables:
+      catalog:
+        default: "unikargo_test"
+    presets:
+      name_prefix: "[testing] "
+    workspace:
+      host: https://adb-2308011107556873.13.azuredatabricks.net
+      # We explicitly deploy to /Workspace/Users/nabiodun@yahoo.com to make sure we only have a single copy.
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - user_name: nabiodun@yahoo.com
+        level: CAN_MANAGE
