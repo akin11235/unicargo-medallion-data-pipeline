@@ -49,27 +49,27 @@ jobs:
       # Step 4: Run tests + coverage
       # -------------------------------
       - name: Run pytest & generate HTML report
-        run: |
-          pytest \
-            --disable-warnings \
-            --cov=./src \                                  # Collect coverage for "src" directory
-            --cov-report=html                              # Generate HTML coverage report in ./htmlcov
-
         # run: |
-        #   # First, let's see what's in the current directory
-        #   ls -la
-
-        #   # Try to find test directories
-        #   find . -name "*test*" -type d
-
-        #   # Run pytest with auto-discovery and coverage
         #   pytest \
         #     --disable-warnings \
-        #     --cov=. \
-        #     --cov-report=html \
-        #     --cov-report=term \
-        #     --verbose \
-        #     || echo "No tests found or tests failed"
+        #     --cov=./src \                                  # Collect coverage for "src" directory
+        #     --cov-report=html                              # Generate HTML coverage report in ./htmlcov
+
+        run: |
+          # First, let's see what's in the current directory
+          ls -la
+
+          # Try to find test directories
+          find . -name "*test*" -type d
+
+          # Run pytest with auto-discovery and coverage
+          pytest \
+            --disable-warnings \
+            --cov=. \
+            --cov-report=html \
+            --cov-report=term \
+            --verbose \
+            || echo "No tests found or tests failed"
 
       # -------------------------------
       # Step 5: Upload coverage artifact
