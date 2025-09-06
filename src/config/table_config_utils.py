@@ -7,26 +7,9 @@ import yaml
 from .environments_config import ENVIRONMENTS
 
 
-
 """
 Configuration management for tables and data processing
 """
-
-
-# -------------------------------
-# Load YAML
-# -------------------------------
-# Get path to project root (go up from src/config/ to project root)
-# Paths
-# BASE_DIR = os.path.dirname(__file__)  # src/config/  #folder containing the current script (src/config/)
-# PROJECT_ROOT = os.path.dirname(os.path.dirname(BASE_DIR))  # Go up 2 levels to project root
-# TABLES_PATH = os.path.join(PROJECT_ROOT, "tables.yaml")
-
-# # Current working directory (where notebook runs)
-# BASE_DIR = os.getcwd()  # could be workspace path
-# PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, '..', '..', '..'))  # adjust as needed
-# TABLES_PATH = os.path.join(PROJECT_ROOT, "tables.yaml")
-
 
 # --------------------------
 # Determine base directory
@@ -49,7 +32,7 @@ PROJECT_ROOT = BASE_DIR.parents[1]
 # --------------------------
 # Path to tables.yaml
 # --------------------------
-TABLES_PATH = PROJECT_ROOT / "tables.yaml"
+TABLES_CONFIG_PATH = PROJECT_ROOT / "tables.yaml"
 
 # Add src folder to sys.path safely (idempotent)
 SRC_DIR = PROJECT_ROOT / "src"
@@ -59,13 +42,13 @@ if str(SRC_DIR) not in sys.path:
 
 # Load YAML from project root
 try:
-    with open(TABLES_PATH, "r") as f:
+    with open(TABLES_CONFIG_PATH, "r") as f:
         TABLES_CONFIG = yaml.safe_load(f)["unikargo_tables"]
-    print(f"Loaded tables config from: {TABLES_PATH}")
+    print(f"Loaded tables config from: {TABLES_CONFIG_PATH}")
 except FileNotFoundError:
-    print(f"YAML file not found at: {TABLES_PATH}")
+    print(f"YAML file not found at: {TABLES_CONFIG_PATH}")
     print(f"Current directory: {os.getcwd()}")
-    print(f"Looking for: {os.path.abspath(TABLES_PATH)}")
+    print(f"Looking for: {os.path.abspath(TABLES_CONFIG_PATH)}")
     TABLES_CONFIG = {}
 except Exception as e:
     print(f"Error loading YAML: {e}")
@@ -162,150 +145,43 @@ def get_table_config(
     )
 
 
+# --------------------------
+# Load logs.yaml
+# --------------------------
+LOGS_CONFIG_PATH = PROJECT_ROOT / "logs.yaml" 
+
+try:
+    with open(LOGS_CONFIG_PATH, "r") as f:
+        LOGS_CONFIG = yaml.safe_load(f)["logs"]
+except FileNotFoundError:
+    raise FileNotFoundError(f"logs.yaml not found at {LOGS_CONFIG_PATH}")
+except Exception as e:
+    raise RuntimeError(f"Error loading logs.yaml: {e}")
 
 
-
-# import os
-# from dataclasses import dataclass
-# from typing import Optional
-# import yaml
-# from .environments_config import ENVIRONMENTS
-
-
-# """
-# Configuration management for tables and data processing
-# """
-
-# # Load YAML from project root
-
-# # Get path to project root (go up from src/config/ to project root)
-# BASE_DIR = os.path.dirname(__file__)  # src/config/
-# PROJECT_ROOT = os.path.dirname(os.path.dirname(BASE_DIR))  # Go up 2 levels to project root
-# TABLES_PATH = os.path.join(PROJECT_ROOT, "tables.yaml")
-
-# try:
-#     with open(TABLES_PATH, "r") as f:
-#         TABLES_CONFIG = yaml.safe_load(f)["unikargo_tables"]
-#     print(f"Loaded tables config from: {TABLES_PATH}")
-# except FileNotFoundError:
-#     print(f"YAML file not found at: {TABLES_PATH}")
-#     print(f"Current directory: {os.getcwd()}")
-#     print(f"Looking for: {os.path.abspath(TABLES_PATH)}")
-#     TABLES_CONFIG = {}
-# except Exception as e:
-#     print(f"Error loading YAML: {e}")
-#     TABLES_CONFIG = {}
-
-# @dataclass
-# class TableConfig:
-#     """
-#     Configuration for a table
-
-#     Represents a single table definition.
-
-#     Parameters:
-#         catalog: Unity Catalog catalog (e.g., store1_dev).
-#         schema: Schema (bronze, silver, gold).
-#         table: Table name (e.g., dimestore_bronze).
-#         format: Defaults to "delta".
-
-#     Method:
-#     full_name → gives the fully qualified table name (catalog.schema.table).
+# --------------------------
+# Helper function
+# --------------------------
+def get_log_config(log_type: str, environment: str = "dev") -> str:
+    """
+    Get full ADLS path for logs (task or pipeline) from logs.yaml.
     
-#     """
-#     catalog: str
-#     schema: str
-#     table: str
-#     layer: str
-#     table_key: Optional[str] = None
-#     format: str = "delta"
+    Args:
+        log_type: 'task' or 'pipeline'
+        environment: 'dev', 'staging', 'prod'
     
-#     @property
-#     def full_name(self) -> str:
-#         return f"{self.catalog}.{self.schema}.{self.table}"
-
-
-# def get_table_config(
-#         entity: str, 
-#         layer: str, 
-#         environment: str = "dev",
-#         table_key: Optional[str] = None
-# ) -> TableConfig:
-#     """
-#     Get table configuration for a specific layer and environment.
+    Returns:
+        Full path string
+    """
+    env_config = LOGS_CONFIG.get(environment)
     
-#     Parameters:
-#     - entity: 'airlines', 'airports', 'flights', or '03_gold'
-#     - layer: Data layer (bronze, silver, gold)
-#     - environment: Environment (dev, staging, prod)
-#     - table_key: for gold layer only (e.g. 'daily_flight_summary')
+    if not env_config:
+        raise ValueError(f"No log config for environment '{environment}'")
     
-#     Returns:
-#     - TableConfig instance
-#     """
-#     env_config = ENVIRONMENTS[environment]  #Looks up the correct catalog in ENVIRONMENTS
-#     catalog = env_config["catalog"]
-
-#     entity_dict = TABLES_CONFIG.get(entity)
-#     if not entity_dict:
-#         raise KeyError(f"No tables defined for entity '{entity}'")
-
-#     if layer == "gold":
-#         if not table_key:
-#             raise ValueError("table_key is required for gold layer tables")
-#         table_name = entity_dict.get("gold", {}).get(table_key)
-#         if not table_name:
-#             raise KeyError(f"No gold table '{table_key}' defined for entity '{entity}'")
-#     else:
-#         table_name = entity_dict.get(layer)
-#         if not table_name:
-#             raise KeyError(f"No table defined for entity '{entity}', layer '{layer}'")
-
-#     return TableConfig(
-#         catalog=catalog,
-#         schema=layer,
-#         table=table_name,
-#         layer=layer,
-#         table_key=table_key
-#     )
-    
-    
-
-
-# # Example configurations for your project
-# DIMESTORE_TABLES = {
-#     "bronze": TableConfig(
-#         catalog="store1_dev",
-#         schema="bronze",
-#         table="dimestore_bronze"
-#     ),
-#     "silver": TableConfig(
-#         catalog="store1_dev",
-#         schema="silver",
-#         table="dimestore_silver"
-#     ),
-#     "gold": TableConfig(
-#         catalog="store1_dev",
-#         schema="gold",
-#         table="dimestore_gold"
-#     )
-# }
-
-# The DIMESTORE_TABLES dict is essentially a shortcut / convenience 
-# mapping for your layers (bronze, silver, gold).
-
-# Where you would use it:
-
-# 1️⃣ Quick lookup in small scripts / notebooks
-
-# Instead of calling get_table_config() each time:
-
-# # Old
-# silver_table = get_table_config("silver", "dev")
-
-# # Using DIMESTORE_TABLES
-# silver_table = DIMESTORE_TABLES["silver"]
-
-# Access fully qualified name
-# print(silver_table.full_name)
-# -> store1_dev.silver.dimestore_silver
+    base = env_config["base_path"]
+    if log_type == "task":
+        return f"{base}/{env_config['task_table']}"
+    elif log_type == "pipeline":
+        return f"{base}/{env_config['pipeline_table']}"
+    else:
+        raise ValueError("log_type must be 'task' or 'pipeline'")

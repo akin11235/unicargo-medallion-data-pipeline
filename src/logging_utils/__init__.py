@@ -1,1 +1,1 @@
-from .logger import log_pipeline_event, log_task_event
+from .logger import log_pipeline_event, log_task_status, TaskLogger

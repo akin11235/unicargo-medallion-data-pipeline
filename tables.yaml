@@ -55,3 +55,7 @@ unikargo_tables:
       seasonal_trends: "unikargo_seasonal_analysis"
       delay_distribution: "unikargo_delay_distribution"
       top_10_busiest_routes: "unikargo_top_10_busiest_routes"
+
+  logs:
+  task: "pipeline_task_log"
+  pipeline: "pipeline_run_log"

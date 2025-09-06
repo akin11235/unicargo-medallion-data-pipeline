@@ -1,108 +1,25 @@
 #  Logging utility
 
-# Do you want me to also add a schema enforcement layer (so logs don’t drift if someone adds new fields accidentally), or do you prefer the lightweight Row-based approach you’re using now?
-
-from pyspark.sql import Row, SparkSession
-from pyspark.sql.functions import current_timestamp
 import time, uuid
+from datetime import datetime
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
 from pyspark.sql.utils import AnalysisException
+from pyspark.sql.functions import current_timestamp, date_format
 
+from io_utils.write_to_table_utils import write_pipeline_log, write_task_log
 
 spark = SparkSession.builder.getOrCreate()
 
 # Configurable log storage path
 LOG_PATH = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/pipeline_completion"
-MAX_RETRIES = 3
-RETRY_DELAY = 5
+# MAX_RETRIES = 3
+# RETRY_DELAY = 5
 
 LOG_PATH_PIPELINE = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/pipeline_logs"
 LOG_PATH_TASK = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/task_logs"
 
 
-# -----------------------
-# Helpers
-# -----------------------
-def new_run_id():
-    """Generate a unique run_id for a pipeline execution."""
-    return str(uuid.uuid4())
-
-
-"""
-1. Delta Format
-    Delta Lake is essentially an enhanced Parquet with added features.
-    Advantages:
-
-    ACID transactions: ensures your writes are atomic, consistent, isolated, and durable. This is crucial for logging or ETL pipelines where partial writes can corrupt data.
-    Schema enforcement and evolution: Delta can reject invalid data or allow safe schema changes.
-    Time travel: you can query the state of the table at a previous version.
-    Upserts / merges: supports MERGE INTO for updating existing rows.
-    Example for logs:
-    If your logging fails halfway and retries, Delta guarantees you won't get partially written or duplicate rows.
-vs
-
-2 Parquet Format
-    Parquet is just a columnar storage format.
-    Advantages:
-        Very fast for reading/writing columnar data.
-        Smaller file sizes due to compression.
-        Limitations for logs:
-        No ACID guarantees → failed writes may leave corrupted or duplicate files.
-        No time travel or versioning.
-        No built-in support for merge/upsert → harder to update existing rows safely.
-"""
-
-def _safe_write(log_df, path, partition_cols, file_format="delta"):
-    """
-    Retry-safe write to Delta or Parquet, auto-creating the table if it doesn't exist.
-
-    Parameters:
-        log_df (DataFrame): Spark DataFrame to write
-        path (str): target path
-        partition_cols (list): columns to partition by
-        file_format (str): "delta" (default) or "parquet"
-    """
-    attempt = 0
-    while attempt < MAX_RETRIES:
-        try:
-            writer = log_df.write.mode("append").partitionBy(*partition_cols)
-
-            if file_format.lower() == "delta":
-                # Try writing; if table doesn't exist, create it
-                try:
-                    writer.format("delta").save(path)
-                except AnalysisException as e:
-                    # If path doesn't exist, create Delta table
-                    if "Path does not exist" in str(e) or "Table or view not found" in str(e):
-                        writer.format("delta").option("overwriteSchema", "true").save(path)
-                    else:
-                        raise
-
-            elif file_format.lower() == "parquet":
-                writer.format("parquet").save(path)
-            else:
-                raise ValueError(f"Unsupported file format: {file_format}")
-
-            return  # success
-
-        except Exception as e:
-            attempt += 1
-            print(f"Logging attempt {attempt} failed: {e}")
-            time.sleep(RETRY_DELAY)
-
-    raise RuntimeError(f"Failed to write logs after {MAX_RETRIES} attempts.")
-
-def _get_widget(name, default=""):
-    """
-    Safe wrapper for dbutils.widgets.get:
-    returns default if dbutils or widget does not exist.
-    """
-    try:
-        import dbutils
-        return dbutils.widgets.get(name)
-    except Exception:
-        return default
-    
 # -----------------------
 # Pipeline Log Utility
 # -----------------------
@@ -122,10 +39,6 @@ def log_pipeline_event(
     Write structured pipeline-level logs to Delta (partitioned),
     automatically using ADF widgets (or defaults if run manually).
     """
-    import time, uuid
-    from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
-    from pyspark.sql.functions import current_timestamp
-
     # --- Get identifiers ---
     pipeline_id   = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
     pipeline_name = pipeline_name or _get_widget("pipeline_name", "pipeline_name")
@@ -135,6 +48,21 @@ def log_pipeline_event(
     start_time = start_time or datetime.now()
     end_time   = end_time or datetime.now()
     duration   = (end_time - start_time).total_seconds()
+
+    # --- Create Row ---
+    log_row = Row(
+        pipeline_id=pipeline_id,
+        pipeline_name=pipeline_name,
+        environment=environment,
+        run_id=run_id,
+        status=status,
+        start_time=start_time,
+        end_time=end_time,
+        duration=duration,
+        rows_processed=rows_processed,
+        message=message,
+        timestamp=None
+    )
 
     # --- Define schema ---
     log_schema = StructType([
@@ -151,209 +79,267 @@ def log_pipeline_event(
         StructField("timestamp", TimestampType(), True)
     ])
 
-    # --- Create DataFrame ---
-    log_df = spark.createDataFrame([(
-        pipeline_id,
-        pipeline_name,
-        environment,
-        run_id,
-        status,
-        start_time,
-        end_time,
-        duration,
-        rows_processed,
-        message,
-        None
-    )], schema=log_schema).withColumn("timestamp", current_timestamp())
+
+    # --- Create Spark DataFrame with timestamp ---
+    log_df = (
+        spark.createDataFrame([log_row], schema=log_schema)
+             .withColumn("timestamp", current_timestamp())
+    )
 
     # --- Partition by pipeline_id + name + environment ---
     partition_cols = ["pipeline_id", "pipeline_name", "environment"]
 
     # --- Write using _safe_write ---
-    _safe_write(log_df, LOG_PATH_PIPELINE, partition_cols, file_format=file_format)
+    # _safe_write(log_df, LOG_PATH_PIPELINE, partition_cols, file_format=file_format)
+    write_pipeline_log(log_df, environment="dev", partition_cols=partition_cols, file_format=file_format)
+
+
 # ----------------------
-# Task-level logging
+# Task-level logging (per stage or operation)
 # ----------------------
-# 2. Task-level logging (per stage or operation)
-# Each notebook stage (Extract, Transform, Load) logs its own status.
-# You might log after:
-    # Read from ADLS (rows read)
-    # Transform (rows after filtering/joins)
-    # Write (rows written, target table name)
 
-# This helps when debugging issues — you’ll know exactly which step failed.
-
-# LOG_PATH_TASK = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/task_logs"
-
-def log_task_event(
-    status, 
-    rows=None, 
-    message="", 
-    pipeline_name=None, 
-    pipeline_id=None, 
-    file_format="delta"
-):
+def log_task_status(status, operation, rows=None, error=None, start_time=None, 
+                   source_path=None, target_path=None, pipeline_name=None, 
+                   pipeline_id=None, file_format="delta"):
     """
-    Write structured task-level logs to Delta (partitioned),
-    automatically using ADF widgets (or defaults if run manually).
+    Write structured task-level logs to Delta (partitioned), 
+    using ADF widgets (or defaults if run manually).
+    Each notebook stage (Extract, Transform, Load) logs its own status.
+        Log after: Read from ADLS (rows read), Transform (rows after filtering/joins) 
+        or write (rows written, target table name). 
+        This helps when debugging issues to know exactly which step failed.
+    
+    Args:
+        status: SUCCESS, FAILED, RUNNING
+        operation: What operation was performed (e.g. "read_flights", "transform_data")  
+        rows: Number of rows processed
+        error: Exception object if failed
+        start_time: Task start time (time.time())
+        source_path: Source data location
+        target_path: Target data location
     """
-
-    # --- Get pipeline/run/task identifiers ---
-    pipeline_id   = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
-    pipeline_name = pipeline_name or _get_widget("pipeline_name", "pipeline_name")
+    
+    # Calculate execution time
+    execution_time_ms = None
+    if start_time:
+        execution_time_ms = int((time.time() - start_time) * 1000)
+    
+    # Handle error details
+    error_type = None
+    error_message = None
+    if error:
+        error_type = type(error).__name__
+        error_message = str(error)[:200]  # Keep it short
+    
+    # Get pipeline context
+    pipeline_id = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
+    pipeline_name = pipeline_name or _get_widget("pipeline_name", "unknown_pipeline")
     run_id = _get_widget("run_id", f"local_run_{int(time.time())}")
-    task_id = _get_widget("task_id", "local_test")
-    environment  = _get_widget("catalog", "unikargo_dev")
-
-
-    # # Create a Row for logging
-    # log_row = Row(
-    #     pipeline_name=pipeline_name,
-    #     catalog=catalog,
-    #     run_id=run_id,
-    #     task_id=task_id,
-    #     status=status,
-    #     rows=rows,
-    #     message=message
-    # )
-
-    # # Create a Spark DataFrame with automatic timestamp column
-    # log_df = spark.createDataFrame([log_row]).withColumn("timestamp", current_timestamp())
-
-    # --- Define schema ---
-    log_schema = StructType([
+    task_id = _get_widget("task_id", "local_task")
+    environment = _get_widget("catalog", "dev")
+    
+    # Simple schema - only essential fields
+    schema = StructType([
         StructField("pipeline_id", StringType(), True),
         StructField("pipeline_name", StringType(), True),
         StructField("environment", StringType(), True),
         StructField("run_id", StringType(), True),
         StructField("task_id", StringType(), True),
+        StructField("operation", StringType(), True),
         StructField("status", StringType(), True),
         StructField("rows", LongType(), True),
-        StructField("message", StringType(), True),
+        StructField("execution_time_ms", LongType(), True),
+        StructField("source_path", StringType(), True),
+        StructField("target_path", StringType(), True),
+        StructField("error_type", StringType(), True),
+        StructField("error_message", StringType(), True),
         StructField("timestamp", TimestampType(), True),
+        StructField("log_date", StringType(), True),  # Partition key
     ])
+    
+    # Create log row
+    log_row = Row(
+        pipeline_id=pipeline_id,
+        pipeline_name=pipeline_name,
+        environment=environment,
+        run_id=run_id,
+        task_id=task_id,
+        operation=operation,
+        status=status,
+        rows=rows,
+        execution_time_ms=execution_time_ms,
+        source_path=source_path,
+        target_path=target_path,
+        error_type=error_type,
+        error_message=error_message,
+        timestamp=None,  # set by current_timestamp()
+        log_date=None    # derived from timestamp
+    )
+    
+    # Create DataFrame
+    log_df = (spark.createDataFrame([log_row], schema=schema)
+             .withColumn("timestamp", current_timestamp())
+             .withColumn("log_date", date_format("timestamp", "yyyy-MM-dd")))
+    
+    # Write with simple partitioning - just environment and date
+    partition_cols = ["environment", "log_date"]
+    write_task_log(log_df, environment=environment, partition_cols=partition_cols, file_format=file_format)
 
 
-    # --- Create DataFrame for logging ---
-    log_df = spark.createDataFrame([(
-        pipeline_id,
-        pipeline_name,
-        environment,
-        run_id,
-        task_id,
-        status,
-        rows,
-        message,
-        None
-    )], schema=log_schema).withColumn("timestamp", current_timestamp())
+# Context manager for automatic logging 
+class TaskLogger:
+    def __init__(self, operation,log_running=False,**kwargs):
+        self.operation = operation
+        self.log_running = log_running
+        self.kwargs = kwargs
+        self.start_time = None
+        
+    def __enter__(self):
+        self.start_time = time.time()
 
-    # Partition by columns including pipeline_id for uniqueness
-    partition_cols = ["pipeline_id", "pipeline_name", "environment", "task_id"]
+         # Only log RUNNING status if requested
+        if self.log_running:
+            log_task_status(
+                status="RUNNING",
+                operation=self.operation,
+                start_time=self.start_time,
+                **self.kwargs
+            )
+            
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        status = "SUCCESS" if exc_type is None else "FAILED"
+        
+        # Log task completion with all accumulated metrics
+        log_task_status(
+            status=status,
+            operation=self.operation,
+            error=exc_val,
+            start_time=self.start_time,
+            **self.kwargs  # This includes any metrics added during execution
+        )
+        
+        return False  # Don't suppress exceptions
+    
+    def set_metrics(self, **metrics):
+        """Update metrics during task execution"""
+        self.kwargs.update(metrics)
 
-    # append to Delta table
-    _safe_write(log_df, LOG_PATH_TASK, partition_cols, file_format=file_format)
-
-    # Write logs as Parquet
-    # _safe_write(log_df, LOG_PATH_TASK, ["pipeline_name", "environment", "task_id"], file_format="parquet")
-
-
-
-# def log_task_event(pipeline_name, environment, run_id, task_id, status, rows=None, message=""):
+# def log_task_status(status, rows=None, message="", pipeline_name=None, pipeline_id=None, file_format="delta"):
 #     """
 #     Write structured task-level logs to Delta (partitioned),
 #     automatically using ADF widgets (or defaults if run manually).
+
+#     Each notebook stage (Extract, Transform, Load) logs its own status.
+#         Log after: Read from ADLS (rows read), Transform (rows after filtering/joins) 
+#         or write (rows written, target table name). 
+#         This helps when debugging issues to know exactly which step failed.
 #     """
-#     # Get widget values with safe defaults
-#     pipeline_name = _get_widget("pipeline_id", "manual_pipeline")
-#     run_id = _get_widget("run_id", f"manual_run_{int(time.time())}")
-#     task_id = _get_widget("task_id", "manual_task")
-#     environment = _get_widget("catalog", "unikargo_dev")
 
+#     # --- Get pipeline/run/task identifiers ---
+#     pipeline_id   = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
+#     pipeline_name = pipeline_name or _get_widget("pipeline_name", "pipeline_name")
+#     run_id = _get_widget("run_id", f"local_run_{int(time.time())}")
+#     task_id = _get_widget("task_id", "local_test")
+#     environment  = _get_widget("catalog", "unikargo_dev")
+
+#     # --- Create Row for logging ---
 #     log_row = Row(
-
-
-
+#         pipeline_id=pipeline_id,
 #         pipeline_name=pipeline_name,
 #         environment=environment,
 #         run_id=run_id,
 #         task_id=task_id,
 #         status=status,
 #         rows=rows,
-#         timestamp=datetime.timezone.utcnow(),
-#         message=message
+#         message=message,
+#         timestamp=None
 #     )
 
-#     log_df = spark.createDataFrame([log_row])
-#     _safe_write(log_df, f"{LOG_PATH_TASK}/task_logs", ["pipeline_name", "environment", "task_id"])
+#     # --- Define schema ---
+#     log_schema = StructType([
+#         StructField("pipeline_id", StringType(), True),
+#         StructField("pipeline_name", StringType(), True),
+#         StructField("environment", StringType(), True),
+#         StructField("run_id", StringType(), True),
+#         StructField("task_id", StringType(), True),
+#         StructField("status", StringType(), True),
+#         StructField("rows", LongType(), True),
+#         StructField("message", StringType(), True),
+#         StructField("timestamp", TimestampType(), True),
+#     ])
+
+#     # --- Create Spark DataFrame with timestamp ---
+#     log_df = (
+#         spark.createDataFrame([log_row], schema=log_schema)
+#              .withColumn("timestamp", current_timestamp())
+#     )
+
+#     # Partition by key columns
+#     partition_cols = ["pipeline_id", "pipeline_name", "environment", "task_id"]
+
+#     # Append to Delta (or parquet)
+#     # _safe_write(log_df, LOG_PATH_TASK, partition_cols, file_format=file_format)
+#     write_task_log(log_df, environment="dev", partition_cols=partition_cols, file_format=file_format)
+
 
 # -----------------------
-# Task Logs
+# Helpers
 # -----------------------
-# def log_task_event(pipeline_name,
-#                    environment,
-#                    run_id,
-#                    task_id,
-#                    status,
-#                    rows=None,
-#                    message=""):
+def new_run_id():
+    """Generate a unique run_id for a pipeline execution."""
+    return str(uuid.uuid4())
+
+
+# def _safe_write(log_df, path, partition_cols, file_format="delta"):
 #     """
-#     Write structured task-level logs to Delta (partitioned).
+#     Retry-safe write to Delta or Parquet, auto-creating the table if it doesn't exist.
+
+#     Parameters:
+#         log_df (DataFrame): Spark DataFrame to write
+#         path (str): target path
+#         partition_cols (list): columns to partition by
+#         file_format (str): "delta" (default) or "parquet"
 #     """
-#     log_row = Row(
-#         pipeline_name=pipeline_name,
-#         environment=environment,
-#         run_id=run_id,
-#         task_id=task_id,
-#         status=status,
-#         rows=rows,
-#         timestamp=datetime.utcnow(),
-#         message=message
-#     )
-
-#     log_df = spark.createDataFrame([log_row])
-#     _safe_write(log_df, f"{LOG_PATH}/task_logs", ["pipeline_name", "environment", "task_id"])  
-
-
-
-
-
-
-# def log_pipeline_event(pipeline_name,
-#                        environment,
-#                         run_id,
-#                         status,
-#                         start_time,
-#                         end_time,
-#                         rows_processed=0,
-#                         message=""):
-#     """
-#     Write structured pipeline event logs to ADLS as Delta.
-#     """
-#     duration = (end_time - start_time).total_seconds()
-
-#     log_row = Row(
-#         pipeline_name=pipeline_name,
-#         environment=environment,
-#         run_id=run_id,
-#         status=status,
-#         start_time=start_time,
-#         end_time=end_time,
-#         duration=duration,
-#         rows_processed=rows_processed,
-#         message=message
-#     )
-
-#     log_df = spark.createDataFrame([log_row])
-
 #     attempt = 0
 #     while attempt < MAX_RETRIES:
 #         try:
-#             log_df.write.format("delta") \
-#                 .mode("append") \
-#                 .partitionBy("pipeline_name", "environment") \
-#                 .save(LOG_PATH)
-#             break
+#             writer = log_df.write.mode("append").partitionBy(*partition_cols)
+
+#             if file_format.lower() == "delta":
+#                 # Try writing; if table doesn't exist, create it
+#                 try:
+#                     writer.format("delta").save(path)
+#                 except AnalysisException as e:
+#                     # If path doesn't exist, create Delta table
+#                     if "Path does not exist" in str(e) or "Table or view not found" in str(e):
+#                         writer.format("delta").option("overwriteSchema", "true").save(path)
+#                     else:
+#                         raise
+
+#             elif file_format.lower() == "parquet":
+#                 writer.format("parquet").save(path)
+#             else:
+#                 raise ValueError(f"Unsupported file format: {file_format}")
+
+#             return  # success
+
 #         except Exception as e:
 #             attempt += 1
 #             print(f"Logging attempt {attempt} failed: {e}")
 #             time.sleep(RETRY_DELAY)
+
+#     raise RuntimeError(f"Failed to write logs after {MAX_RETRIES} attempts.")
+
+def _get_widget(name, default=""):
+    """
+    Safe wrapper for dbutils.widgets.get:
+    returns default if dbutils or widget does not exist.
+    """
+    try:
+        import dbutils
+        return dbutils.widgets.get(name)
+    except Exception:
+        return default
+    
