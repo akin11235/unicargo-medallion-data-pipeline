@@ -83,6 +83,7 @@ class TableConfig:
     layer: str                  # logical layer name, e.g., bronze
     table_key: Optional[str] = None
     format: str = "delta"
+    raw_path: Optional[str] = None
     
     @property
     def full_name(self) -> str:
@@ -130,10 +131,15 @@ def get_table_config(
         table_name = entity_dict.get("gold", {}).get(table_key)
         if not table_name:
             raise KeyError(f"No gold table '{table_key}' defined for entity '{entity}'")
+        raw_path = None
+
     else:
         table_name = entity_dict.get(layer.lower())
         if not table_name:
             raise KeyError(f"No table defined for entity '{entity}', layer '{layer}'")
+        # Fetch raw path only for bronze tables
+        raw_paths_dict = TABLES_CONFIG.get("raw_paths", {})
+        raw_path = raw_paths_dict.get(entity) if layer.lower() == "bronze" else None
         
 
     return TableConfig(
@@ -141,7 +147,8 @@ def get_table_config(
         schema=schema,
         table=table_name,
         layer=layer.lower(),
-        table_key=table_key
+        table_key=table_key,
+        raw_path=raw_path
     )
 
 

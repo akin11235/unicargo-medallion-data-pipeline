@@ -29,6 +29,11 @@
 #     avg_delay_by_airline_month: unikargo_avg_delay_by_airline_month
 
 unikargo_tables:
+  raw_paths:
+    airports: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/airports.csv"
+    airlines: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/airlines.csv"
+    flights: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/flights.csv"
+
   airlines:
     bronze: "unikargo_airline_bronze"
     silver: "unikargo_airline_silver"
