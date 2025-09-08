@@ -1,102 +1,16 @@
-#  Logging utility
-
-import time, uuid
-from datetime import datetime
-from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
-from pyspark.sql.utils import AnalysisException
-from pyspark.sql.functions import current_timestamp, date_format
-
-from io_utils.write_to_table_utils import write_pipeline_log, write_task_log
-
-spark = SparkSession.builder.getOrCreate()
-
-# Configurable log storage path
-LOG_PATH = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/pipeline_completion"
-# MAX_RETRIES = 3
-# RETRY_DELAY = 5
-
-LOG_PATH_PIPELINE = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/pipeline_logs"
-LOG_PATH_TASK = "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs/task_logs"
-
-
-# -----------------------
-# Pipeline Log Utility
-# -----------------------
-def log_pipeline_event(
-    pipeline_name=None,
-    catalog=None,
-    run_id=None,
-    status="RUNNING",
-    start_time=None,
-    end_time=None,
-    rows_processed=0,
-    message="",
-    pipeline_id=None,
-    file_format="delta"
-):
-    """
-    Write structured pipeline-level logs to Delta (partitioned),
-    automatically using ADF widgets (or defaults if run manually).
-    """
-    # --- Get identifiers ---
-    pipeline_id   = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
-    pipeline_name = pipeline_name or _get_widget("pipeline_name", "pipeline_name")
-    run_id        = run_id or _get_widget("run_id", f"local_run_{int(time.time())}")
-    environment   = catalog or _get_widget("catalog", "unikargo_dev")
-
-    start_time = start_time or datetime.now()
-    end_time   = end_time or datetime.now()
-    duration   = (end_time - start_time).total_seconds()
-
-    # --- Create Row ---
-    log_row = Row(
-        pipeline_id=pipeline_id,
-        pipeline_name=pipeline_name,
-        environment=environment,
-        run_id=run_id,
-        status=status,
-        start_time=start_time,
-        end_time=end_time,
-        duration=duration,
-        rows_processed=rows_processed,
-        message=message,
-        timestamp=None
-    )
-
-    # --- Define schema ---
-    log_schema = StructType([
-        StructField("pipeline_id", StringType(), True),
-        StructField("pipeline_name", StringType(), True),
-        StructField("environment", StringType(), True),
-        StructField("run_id", StringType(), True),
-        StructField("status", StringType(), True),
-        StructField("start_time", TimestampType(), True),
-        StructField("end_time", TimestampType(), True),
-        StructField("duration", LongType(), True),
-        StructField("rows_processed", LongType(), True),
-        StructField("message", StringType(), True),
-        StructField("timestamp", TimestampType(), True)
-    ])
-
-
-    # --- Create Spark DataFrame with timestamp ---
-    log_df = (
-        spark.createDataFrame([log_row], schema=log_schema)
-             .withColumn("timestamp", current_timestamp())
-    )
-
-    # --- Partition by pipeline_id + name + environment ---
-    partition_cols = ["pipeline_id", "pipeline_name", "environment"]
-
-    # --- Write using _safe_write ---
-    # _safe_write(log_df, LOG_PATH_PIPELINE, partition_cols, file_format=file_format)
-    write_pipeline_log(log_df, environment="dev", partition_cols=partition_cols, file_format=file_format)
-
-
 # ----------------------
 # Task-level logging (per stage or operation)
 # ----------------------
+
+import time, uuid
+from pyspark.sql import Row, SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
+from pyspark.sql.functions import current_timestamp, date_format
+
+from io_utils.write_to_table_utils import write_task_log
+from io_utils.widget_utils import _get_widget
+
+spark = SparkSession.builder.getOrCreate()
 
 def log_task_status(status, operation, rows=None, error=None, start_time=None, 
                    source_path=None, target_path=None, pipeline_name=None, 
@@ -158,8 +72,8 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
         StructField("log_date", StringType(), True),  # Partition key
     ])
     
-    # Create log row
-    log_row = Row(
+    # Create log entry
+    log_entry = Row(
         pipeline_id=pipeline_id,
         pipeline_name=pipeline_name,
         environment=environment,
@@ -178,7 +92,7 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
     )
     
     # Create DataFrame
-    log_df = (spark.createDataFrame([log_row], schema=schema)
+    log_df = (spark.createDataFrame([log_entry], schema=schema)
              .withColumn("timestamp", current_timestamp())
              .withColumn("log_date", date_format("timestamp", "yyyy-MM-dd")))
     
@@ -226,22 +140,3 @@ class TaskLogger:
     def set_metrics(self, **metrics):
         """Update metrics during task execution"""
         self.kwargs.update(metrics)
-
-# -----------------------
-# Helpers
-# -----------------------
-def new_run_id():
-    """Generate a unique run_id for a pipeline execution."""
-    return str(uuid.uuid4())
-
-def _get_widget(name, default=""):
-    """
-    Safe wrapper for dbutils.widgets.get:
-    returns default if dbutils or widget does not exist.
-    """
-    try:
-        import dbutils
-        return dbutils.widgets.get(name)
-    except Exception:
-        return default
-    
