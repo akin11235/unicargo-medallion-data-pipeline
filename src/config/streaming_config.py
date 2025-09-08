@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
-from .environments_config import ENVIRONMENTS
+# from .environments_config import ENVIRONMENTS
 from .table_config_utils import TableConfig
 
 @dataclass

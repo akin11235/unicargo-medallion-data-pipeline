@@ -11,3 +11,4 @@ logs:
     base_path: "abfss://medallion@adlsunikargoprd.dfs.core.windows.net/logs"
     task_table: "prod_task_logs"
     pipeline_table: "pipeline_logs"
+
