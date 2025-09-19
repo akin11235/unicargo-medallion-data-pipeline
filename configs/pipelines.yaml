@@ -1,0 +1,18 @@
+pipelines:
+  flights:
+    tasks:
+      - operation: read_flights_raw
+        input_from: null
+      - operation: transform_flights
+        input_from: read_flights_raw
+      - operation: write_flights_bronze
+        input_from: transform_flights
+
+  airports:
+    tasks:
+      - operation: read_airports_raw
+        input_from: null
+      - operation: transform_airports
+        input_from: read_airports_raw
+      - operation: write_airports_bronze
+        input_from: transform_airports

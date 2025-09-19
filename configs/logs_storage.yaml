@@ -1,6 +1,6 @@
 logs:
   dev:
-    base_path: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/logs" #root folder for logs in ADLS.
+    base_path: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/logs" #root folder for logs in ADLS.
     task_table: "dev_task_logs" # subfolder for each log type.
     pipeline_table: "pipeline_logs" # subfolder for each log type.
   staging:
@@ -11,4 +11,3 @@ logs:
     base_path: "abfss://medallion@adlsunikargoprd.dfs.core.windows.net/logs"
     task_table: "prod_task_logs"
     pipeline_table: "pipeline_logs"
-

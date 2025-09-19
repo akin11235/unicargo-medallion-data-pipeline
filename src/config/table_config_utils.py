@@ -160,7 +160,15 @@ def get_table_config(
         # Fetch raw path only for bronze tables
         raw_paths_dict = TABLES_CONFIG.get("raw_paths", {})
         raw_path = raw_paths_dict.get(entity) if layer.lower() == "bronze" else None
-        
+        # if layer.lower() == "bronze":
+        #     raw_paths_dict = TABLES_CONFIG.get("raw_paths", {})
+        #     # Map environment to raw_paths key
+        #     raw_env_key = "local_run" if environment.lower() in ["dev", "local"] else "adls_run"
+        #     env_raw_paths = raw_paths_dict.get(raw_env_key, {})
+        #     raw_path = env_raw_paths.get(entity)
+        # else:
+        #     raw_path = None
+                
 
     return TableConfig(
         catalog=catalog,

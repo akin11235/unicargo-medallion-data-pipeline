@@ -10,13 +10,13 @@ environments:
       gold: "03_gold" # unikargo_dev.03_gold.<table_name>
     checkpoint_base: "/mnt/dev/checkpoints" # Base path for structured streaming checkpoints
 
-  staging:
+  test:
     catalog: "unikargo_staging" # Unity Catalog for staging (UAT/pre-prod)
     prefix_map:
       bronze: "01_bronze" # unikargo_staging.01_bronze.<table_name>
       silver: "02_silver" # unikargo_staging.02_silver.<table_name>
       gold: "03_gold" # unikargo_staging.03_gold.<table_name>
-    checkpoint_base: "/mnt/staging/checkpoints"
+    checkpoint_base: "/mnt/test/checkpoints"
 
   prod:
     catalog: "unikargo_prod" # Unity Catalog for production

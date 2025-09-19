@@ -1,9 +1,17 @@
 # # Table configuration for Unikargo data pipeline
 unikargo_tables:
   raw_paths: # Paths to raw data files in ADLS (landing zone)
-    airports: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/airports.csv"
-    airlines: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/airlines.csv"
-    flights: "abfss://medallion@adlsunikarrgodev.dfs.core.windows.net/raw/volumes/flights.csv"
+    airports: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airports.csv"
+    airlines: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airlines.csv"
+    flights: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/flights.csv"
+    # local_run: # Local development
+    #   airports: "data/local_airports.csv"
+    #   airlines: "data/local_airlines.csv"
+    #   flights: "data/local_flights.csv"
+    # adls_run: # Databricks / ADLS
+    #   airports: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airports.csv"
+    #   airlines: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airlines.csv"
+    #   flights: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/flights.csv"
 
   airlines: # Airline dimension + airline-based aggregates
     bronze: "unikargo_airline_bronze" # Raw ingested airline data

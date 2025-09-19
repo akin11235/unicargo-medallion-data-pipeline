@@ -1,6 +1,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import lit, create_map, current_timestamp
 
+# Dynamic value references
 def add_pipeline_metadata(
     df: DataFrame,
     pipeline_id: str,
@@ -19,11 +20,16 @@ def add_pipeline_metadata(
     Returns:
         DataFrame: DataFrame with an additional 'metadata' column
     """
+
+    # Replace None with empty string
+    def safe_val(val):
+        return val if val is not None else ""
+    
     return  df.withColumn(
     "metadata",
     create_map(
-        lit("pipeline_id"), lit(pipeline_id),
-        lit("run_id"), lit(run_id),
-        lit("task_id"), lit(task_id)
+        lit("pipeline_id"), lit(safe_val(pipeline_id)),
+        lit("run_id"), lit(safe_val(run_id)),
+        lit("task_id"), lit(safe_val(task_id))
     )
     ).withColumn("processed_timestamp", current_timestamp())
