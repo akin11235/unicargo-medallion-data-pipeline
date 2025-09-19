@@ -5,9 +5,7 @@ resources:
       tasks:
         - task_key: bronze_orchestrator
           spark_python_task:
-            # python_file: ../unicargo_etl/notebooks/01_bronze/01_bronze_unicargo_airlines.ipynb
             python_file: "${workspace.file_path}/unicargo_etl/scripts/01_bronze/bronze_orchestrator.py"
-            # python_file: ../unicargo_etl/scripts/bronze_orchestrator.py
             parameters:
               # Pipeline / job-level info
               # - "${var.ENV}"
