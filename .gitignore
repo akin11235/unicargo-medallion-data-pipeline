@@ -9,3 +9,4 @@ scratch/**
 .venv_*/
 .env
 .env
+.env
