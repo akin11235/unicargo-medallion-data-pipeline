@@ -8,5 +8,3 @@ scratch/**
 !scratch/README.md
 .venv_*/
 .env
-.env
-.env
