@@ -156,7 +156,7 @@ def run_tasks(task_registry, entity_name=None):
                 run_id=args.run_id,
                 task_id=args.task_id,
                 tags=tags,
-                etl_metrics=etl_metrics
+                etl_metrics={}
                 ) as logger:
                 df_in = last_df_per_entity.get(task["entity"])
                 
@@ -178,13 +178,32 @@ def run_tasks(task_registry, entity_name=None):
 
                 last_df_per_entity[task["entity"]] = df_out
 
+                # Compute metrics if df_out exists
                 if df_out is not None:
                     # logger.set_metrics(rows=df_out.count())
-                    etl_metrics = {}
-                    if "weather_delay" in df_out.columns:
-                        etl_metrics["null_weather_delay_count"] = df_out.filter(col("weather_delay").isNull()).count()
+                    # etl_metrics = {}
+                    etl_metrics = {
+                    "rows_processed": df_out.count(),
+                    "columns_processed": len(df_out.columns),
+                    "null_counts": {
+                        col_name: df_out.filter(col(col_name).isNull()).count()
+                        for col_name in df_out.columns
+                        }
+                    }
+                    # if "weather_delay" in df_out.columns:
+                    #     # etl_metrics["null_weather_delay_count"] = df_out.filter(col("weather_delay").isNull()).count()
+                    #     etl_metrics["rows_processed"] = df_out.count()
+                    #     etl_metrics["columns_processed"] = len(df_out.columns)
+                    #     etl_metrics["null_counts"] = {
+                    #         col_name: df_out.filter(col(col_name).isNull()).count()
+                    #         for col_name in df_out.columns
+                    #     }
+
+                    # else:
+                    #     etl_metrics = {"rows_processed": 0, "columns_processed": 0, "null_counts": {}}
                     logger.set_metrics(
-                        rows=df_out.count(),
+                        # rows=df_out.count(),
+                        rows=etl_metrics["rows_processed"],
                         etl_metrics=etl_metrics
                     )
                     # logger.set_metrics(
@@ -206,7 +225,7 @@ all_results = run_tasks(task_registry)
 
 
 # --------Uncomment to debug (Read Delta logs and show latest logs)-----------------
-log_type =  'task'
-log_path = get_log_adls_path(log_type, environment=args.environment) # Path to save logging for tasks
-logs_df = spark.read.format("delta").load(log_path)
-logs_df.orderBy("timestamp", ascending=False).show(20, truncate=False)
+# log_type =  'task'
+# log_path = get_log_adls_path(log_type, environment=args.environment) # Path to save logging for tasks
+# logs_df = spark.read.format("delta").load(log_path)
+# logs_df.orderBy("timestamp", ascending=False).show(20, truncate=False)

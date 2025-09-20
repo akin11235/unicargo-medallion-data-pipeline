@@ -17,25 +17,6 @@ spark = SparkSession.builder.getOrCreate()
 if "_STEP_COUNTER" not in globals():
     _STEP_COUNTER = {}
 
-# def log_task_status(status, operation, rows=None, error=None, start_time=None, 
-#                    source_path=None, target_path=None, pipeline_name=None, 
-#                    pipeline_id=None, file_format="delta"):
-# def log_task_status(
-#     status,
-#     operation,
-#     rows=None,
-#     error=None,
-#     start_time=None,
-#     source_path=None,
-#     target_path=None,
-#     pipeline_name=None,
-#     pipeline_id=None,
-#     parent_task_id=None,
-#     attempt_number=None,
-#     tags=None,
-#     etl_metrics=None,
-#     file_format="delta"
-# ):
 def log_task_status(
     status,
     operation,
@@ -97,20 +78,12 @@ def log_task_status(
     error_message = str(error)[:200] if error else None
     
     # Get pipeline context
-    # pipeline_id = pipeline_id or _get_widget("pipeline_id", f"local_run")
-    # pipeline_name = pipeline_name or _get_widget("pipeline_name", "unknown_pipeline")
-    # run_id = _get_widget("run_id", f"local_run_id_{int(time.time())}")
-    # run_name = _get_widget("run_name", f"local_run_name_{uuid.uuid4()}")
-    # environment = _get_widget("ENV", "dev")
-    # task_id = task_id or _get_widget("task_id", f"local_task_id_{str(uuid.uuid4())}")
-
     pipeline_id   = _get_param(1, "pipeline_id", f"local_run", spark)
     pipeline_name = _get_param(2, "pipeline_name", "unknown_pipeline", spark)
     run_id        = _get_param(3, "run_id", f"local_run_id_{int(time.time())}", spark)
     run_name      = _get_param(4, "run_name", f"local_run_name_{uuid.uuid4()}", spark)
     environment   = _get_param(5, "ENV", "dev", spark)
     task_id       = _get_param(6, "task_id", f"local_task_id_{uuid.uuid4()}", spark)
-
 
     # Step tracking
     key = f"{pipeline_id}_{run_id}"
@@ -125,26 +98,7 @@ def log_task_status(
     worker_node = _get_widget("worker_node", None)
     executor_id = _get_widget("executor_id", None)
     
-    # Simple schema - only essential fields
-    # schema = StructType([
-    #     StructField("pipeline_id", StringType(), True),
-    #     StructField("pipeline_name", StringType(), True),
-    #     StructField("environment", StringType(), True),
-    #     StructField("run_id", StringType(), True),
-    #     StructField("run_name", StringType(), True),
-    #     StructField("task_id", StringType(), True),
-    #     StructField("operation", StringType(), True),
-    #     StructField("status", StringType(), True),
-    #     StructField("rows", LongType(), True),
-    #     StructField("execution_time_ms", LongType(), True),
-    #     StructField("source_path", StringType(), True),
-    #     StructField("target_path", StringType(), True),
-    #     StructField("error_type", StringType(), True),
-    #     StructField("error_message", StringType(), True),
-    #     StructField("timestamp", TimestampType(), True),
-    #     StructField("log_date", StringType(), True),  # Partition key
-    # ])
-
+    # Logging schema
     task_logger_schema = StructType([
     # Step / task identifiers
     StructField("pipeline_id", StringType(), True),
@@ -230,18 +184,10 @@ class TaskLogger:
         self.kwargs = kwargs
         self.start_time = None
 
-        # Set default context if missing
-        # self.kwargs.setdefault("pipeline_id", _get_widget("pipeline_id", "local_run"))
-        # self.kwargs.setdefault("pipeline_name", _get_widget("pipeline_name", "unknown_pipeline"))
-        # self.kwargs.setdefault("run_id", _get_widget("run_id", f"local_run_{int(time.time())}"))
-        # self.kwargs.setdefault("run_name", _get_widget("run_name", f"local_run_name_{uuid.uuid4()}"))
-        # self.kwargs.setdefault("environment", _get_widget("ENV", "dev"))
-
          # Generate a unique task_id if missing
         self.task_id = self.kwargs.get("task_id") or f"local_task_id_{str(uuid.uuid4())}"
         self.kwargs["task_id"] = self.task_id
 
-        
     def __enter__(self):
         self.start_time = time.time()
 

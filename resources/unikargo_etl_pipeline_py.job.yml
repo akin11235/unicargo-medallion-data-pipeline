@@ -17,7 +17,7 @@ resources:
               # - "dev"
               # Extra placeholders for metrics/tags
               - '--tags={"team":"data_eng","layer":"bronze"}'
-              - "--etl_metrics={}"
+              - '--etl_metrics={"rows_processed":0,"columns_processed":0,"null_counts":{}}'
             source: WORKSPACE
           job_cluster_key: f4s_sn
         # - task_key: 02_bronze_unikargo_airports
