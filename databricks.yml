@@ -8,9 +8,13 @@ include:
   - resources/*.yml
   - resources/*/*.yml
 
+# variables:
+#   catalog:
+#     default: "unikargo_dev"
+
 variables:
-  catalog:
-    default: "unikargo_dev"
+  ENV:
+    default: "dev"
 
 targets:
   dev:
@@ -21,13 +25,16 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://adb-2560271708754576.16.azuredatabricks.net/
+      # host: https://adb-2560271708754576.16.azuredatabricks.net/
+      host: https://adb-178517304730562.2.azuredatabricks.net/
 
   test:
     mode: production
     variables:
-      catalog:
-        default: "unikargo_test"
+      # catalog:
+      #   default: "unikargo_test"
+      ENV:
+        default: "test"
     presets:
       name_prefix: "[testing] "
     workspace:

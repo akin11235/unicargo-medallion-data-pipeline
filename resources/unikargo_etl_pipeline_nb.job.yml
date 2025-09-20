@@ -11,7 +11,9 @@ resources:
               run_id: "{{job.run_id}}"
               task_id: "{{task.run_id}}"
               processed_timestamp: "{{job.start_time.iso_datetime}}"
-              catalog: "${var.catalog}"
+              # run_name: "{{job.run_name}}"
+              # catalog: "${var.catalog}"
+              ENV: "${var.ENV}"
             source: WORKSPACE
           job_cluster_key: f4s_sn
         - task_key: 02_bronze_unikargo_airports
@@ -24,7 +26,9 @@ resources:
               run_id: "{{job.run_id}}"
               task_id: "{{task.run_id}}"
               processed_timestamp: "{{job.start_time.iso_datetime}}"
-              catalog: "${var.catalog}"
+              # run_name: "{{job.run_name}}"
+              # catalog: "${var.catalog}"
+              ENV: "${var.ENV}"
             source: WORKSPACE
           job_cluster_key: f4s_sn
         - task_key: 02_bronze_unikargo_flights
@@ -37,7 +41,9 @@ resources:
               run_id: "{{job.run_id}}"
               task_id: "{{task.run_id}}"
               processed_timestamp: "{{job.start_time.iso_datetime}}"
-              catalog: "${var.catalog}"
+              # run_name: "{{job.run_name}}"
+              # catalog: "${var.catalog}"
+              ENV: "${var.ENV}"
             source: WORKSPACE
           job_cluster_key: f4s_sn
       job_clusters:

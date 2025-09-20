@@ -1,6 +1,6 @@
 import sys
 sys.path.append('..')
-from config import get_table_config, get_log_config
+from config import get_table_config, get_log_adls_path
 from datetime import datetime
 import time
 from pyspark.sql.utils import AnalysisException
@@ -115,7 +115,7 @@ def write_log(
 
     partition_cols = partition_cols or [] 
     # 1. Resolve path from config
-    path = get_log_config(log_type, environment=environment)
+    path = get_log_adls_path(log_type, environment=environment)
 
     # 2. Prepare writer
     writer = log_df.write.mode("append").partitionBy(*partition_cols)

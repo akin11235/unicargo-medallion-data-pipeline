@@ -1,0 +1,40 @@
+# azure-pipelines.yml
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+stages:
+  - stage: Build
+    jobs:
+      - job: ValidateCode
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.8"
+          - script: |
+              pip install pyspark delta-spark
+              python -m py_compile notebooks/*.py
+            displayName: "Validate Python notebooks"
+
+  - stage: Deploy
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToProduction
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: "Production Service Connection"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
+                    inlineScript: |
+                      # Deploy ADF pipeline
+                      az datafactory pipeline create \
+                        --factory-name ${{ variables.adfName }} \
+                        --pipeline-name flight-data-pipeline \
+                        --pipeline @pipeline/flight-data-pipeline.json

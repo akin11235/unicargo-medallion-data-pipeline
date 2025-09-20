@@ -1,4 +1,5 @@
-from .table_config_utils import get_table_config, get_log_config, TableConfig
+from .table_config_utils import get_table_config, TableConfig
+from .logs_configs_utils import get_log_adls_path
 from .cleaning_config import get_cleaning_config, CleaningConfig
 from .streaming_config import get_streaming_config, StreamingConfig
-from .environments_config import ENVIRONMENTS
+# from .environments_config import ENVIRONMENTS

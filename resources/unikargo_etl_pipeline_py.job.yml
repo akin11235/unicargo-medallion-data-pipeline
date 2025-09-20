@@ -1,0 +1,57 @@
+resources:
+  jobs:
+    unikargo_etl_pipeline_py_bronze:
+      name: unikargo_etl_pipeline_py_bronze
+      tasks:
+        - task_key: bronze_orchestrator
+          spark_python_task:
+            python_file: "${workspace.file_path}/unicargo_etl/scripts/01_bronze/bronze_orchestrator.py"
+            parameters:
+              # Pipeline / job-level info
+              # - "${var.ENV}"
+              - "--environment=${var.ENV}"
+              - "--pipeline_id={{job.id}}"
+              - "--pipeline_name={{job.name}}"
+              - "--run_id={{job.run_id}}"
+              - "--start_time={{job.start_time.iso_datetime}}"
+              # - "dev"
+              # Extra placeholders for metrics/tags
+              - '--tags={"team":"data_eng","layer":"bronze"}'
+              - '--etl_metrics={"rows_processed":0,"columns_processed":0,"null_counts":{}}'
+            source: WORKSPACE
+          job_cluster_key: f4s_sn
+        # - task_key: 02_bronze_unikargo_airports
+        #   depends_on:
+        #     - task_key: 01_bronze_unikargo_airlines
+        #   notebook_task:
+        #     notebook_path: ../unicargo_etl/notebooks/01_bronze/01_bronze_unicargo_airports.ipynb
+        #     base_parameters:
+        #       pipeline_id: "{{job.id}}"
+        #       run_id: "{{job.run_id}}"
+        #       task_id: "{{task.run_id}}"
+        #       processed_timestamp: "{{job.start_time.iso_datetime}}"
+        #       run_name: "{{job.run_name}}"
+        #       # catalog: "${var.catalog}"
+        #       ENV: "${var.ENV}"
+        #     source: WORKSPACE
+        #   job_cluster_key: f4s_sn
+        # - task_key: 02_bronze_unikargo_flights
+        #   depends_on:
+        #     - task_key: 02_bronze_unikargo_airports
+        #   notebook_task:
+        #     notebook_path: ../unicargo_etl/notebooks/01_bronze/01_bronze_unicargo_flights.ipynb
+        #     base_parameters:
+        #       pipeline_id: "{{job.id}}"
+        #       run_id: "{{job.run_id}}"
+        #       task_id: "{{task.run_id}}"
+        #       processed_timestamp: "{{job.start_time.iso_datetime}}"
+        #       run_name: "{{job.run_name}}"
+        #       # catalog: "${var.catalog}"
+        #       ENV: "${var.ENV}"
+        #     source: WORKSPACE
+        #   job_cluster_key: f4s_sn
+      job_clusters:
+        - job_cluster_key: f4s_sn
+          new_cluster: "${var.f4s_sn}"
+      queue:
+        enabled: true

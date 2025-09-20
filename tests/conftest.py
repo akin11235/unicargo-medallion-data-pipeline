@@ -1,4 +1,7 @@
+import sys
 import os
+from pathlib import Path
+
 import pytest
 from unittest.mock import MagicMock
 from pyspark.sql import SparkSession
@@ -9,7 +12,13 @@ try:
 except ImportError:
     DatabricksSession = None
 
+# Add src folder to sys.path
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  # go up from tests/ to project root
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
+from config import table_config_utils
 # -----------------------------
 # PySpark Fixtures
 # -----------------------------
@@ -124,5 +133,5 @@ def mock_environments():
 def patch_table_config(monkeypatch, mock_tables_config, mock_environments):
     from config import table_config_utils
     monkeypatch.setattr(table_config_utils, "TABLES_CONFIG", mock_tables_config)
-    monkeypatch.setattr(table_config_utils, "ENVIRONMENTS", mock_environments)
+    monkeypatch.setattr(table_config_utils, "ENVIRONMENTS_CONFIG", mock_environments)
     return table_config_utils

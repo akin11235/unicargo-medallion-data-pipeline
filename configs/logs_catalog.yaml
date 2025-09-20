@@ -1,0 +1,3 @@
+logs: # Logging tables for observability
+  task: "pipeline_task_log" # Logs per task execution
+  pipeline: "pipeline_run_log" # Logs per pipeline execution

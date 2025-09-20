@@ -1,0 +1,27 @@
+# Config-driven ETL
+# Defines environment-specific configurations (dev, staging, prod)
+
+environments:
+  dev:
+    catalog: "unikargo_dev" # Unity Catalog for development
+    prefix_map: # Schema mapping for medallion layers
+      bronze: "01_bronze" # unikargo_dev.01_bronze.<table_name>
+      silver: "02_silver" # unikargo_dev.02_silver.<table_name>
+      gold: "03_gold" # unikargo_dev.03_gold.<table_name>
+    checkpoint_base: "/mnt/dev/checkpoints" # Base path for structured streaming checkpoints
+
+  test:
+    catalog: "unikargo_staging" # Unity Catalog for staging (UAT/pre-prod)
+    prefix_map:
+      bronze: "01_bronze" # unikargo_staging.01_bronze.<table_name>
+      silver: "02_silver" # unikargo_staging.02_silver.<table_name>
+      gold: "03_gold" # unikargo_staging.03_gold.<table_name>
+    checkpoint_base: "/mnt/test/checkpoints"
+
+  prod:
+    catalog: "unikargo_prod" # Unity Catalog for production
+    prefix_map:
+      bronze: "01_bronze" # unikargo_prod.01_bronze.<table_name>
+      silver: "02_silver" # unikargo_prod.02_silver.<table_name>
+      gold: "03_gold" # unikargo_prod.03_gold.<table_name>
+    checkpoint_base: "/mnt/prod/checkpoints"

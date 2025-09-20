@@ -1,16 +1,27 @@
-import time
-import uuid
-import traceback
-from datetime import datetime
-from pyspark.sql import Row
+# ----------------------
+# Task-level logging (per stage or operation)
+# ----------------------
+
+import time, uuid
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, LongType, TimestampType
 from pyspark.sql.functions import current_timestamp, date_format
+
+from io_utils.write_to_table_utils import write_task_log
+from io_utils.widget_utils import _get_widget
+
+spark = SparkSession.builder.getOrCreate()
 
 def log_task_status(status, operation, rows=None, error=None, start_time=None, 
                    source_path=None, target_path=None, pipeline_name=None, 
                    pipeline_id=None, file_format="delta"):
     """
-    Simple, focused task logging with essential metrics only.
+    Write structured task-level logs to Delta (partitioned), 
+    using ADF widgets (or defaults if run manually).
+    Each notebook stage (Extract, Transform, Load) logs its own status.
+        Log after: Read from ADLS (rows read), Transform (rows after filtering/joins) 
+        or write (rows written, target table name). 
+        This helps when debugging issues to know exactly which step failed.
     
     Args:
         status: SUCCESS, FAILED, RUNNING
@@ -35,11 +46,14 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
         error_message = str(error)[:200]  # Keep it short
     
     # Get pipeline context
-    pipeline_id = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
+    # pipeline_id = pipeline_id or _get_widget("pipeline_id", str(uuid.uuid4()))
+    pipeline_id = pipeline_id or _get_widget("pipeline_id", f"local_run")
     pipeline_name = pipeline_name or _get_widget("pipeline_name", "unknown_pipeline")
-    run_id = _get_widget("run_id", f"local_run_{int(time.time())}")
-    task_id = _get_widget("task_id", "local_task")
-    environment = _get_widget("catalog", "dev")
+    run_id = _get_widget("run_id", f"local_run_id_{int(time.time())}")
+    task_id = _get_widget("task_id", str(uuid.uuid4()))
+    run_name = _get_widget("run_name", f"local_run_name_{uuid.uuid4()}")
+    # environment = _get_widget("catalog", "dev")
+    environment = _get_widget("ENV", "dev")
     
     # Simple schema - only essential fields
     schema = StructType([
@@ -47,6 +61,7 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
         StructField("pipeline_name", StringType(), True),
         StructField("environment", StringType(), True),
         StructField("run_id", StringType(), True),
+        StructField("run_name", StringType(), True),
         StructField("task_id", StringType(), True),
         StructField("operation", StringType(), True),
         StructField("status", StringType(), True),
@@ -60,12 +75,13 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
         StructField("log_date", StringType(), True),  # Partition key
     ])
     
-    # Create log row
-    log_row = Row(
+    # Create log entry
+    log_entry = Row(
         pipeline_id=pipeline_id,
         pipeline_name=pipeline_name,
         environment=environment,
         run_id=run_id,
+        run_name=run_name,
         task_id=task_id,
         operation=operation,
         status=status,
@@ -75,12 +91,12 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
         target_path=target_path,
         error_type=error_type,
         error_message=error_message,
-        timestamp=None,  # Will be set by current_timestamp()
-        log_date=None    # Will be derived from timestamp
+        timestamp=None,  # set by current_timestamp()
+        log_date=None    # derived from timestamp
     )
     
     # Create DataFrame
-    log_df = (spark.createDataFrame([log_row], schema=schema)
+    log_df = (spark.createDataFrame([log_entry], schema=schema)
              .withColumn("timestamp", current_timestamp())
              .withColumn("log_date", date_format("timestamp", "yyyy-MM-dd")))
     
@@ -89,10 +105,42 @@ def log_task_status(status, operation, rows=None, error=None, start_time=None,
     write_task_log(log_df, environment=environment, partition_cols=partition_cols, file_format=file_format)
 
 
+# Context manager for automatic logging 
+class TaskLogger:
+    def __init__(self, operation,log_running=False,**kwargs):
+        self.operation = operation
+        self.log_running = log_running
+        self.kwargs = kwargs
+        self.start_time = None
+        
+    def __enter__(self):
+        self.start_time = time.time()
 
-def _get_widget(name, default):
-    """Get widget value or return default"""
-    try:
-        return dbutils.widgets.get(name)
-    except:
-        return default
+         # Only log RUNNING status if requested
+        if self.log_running:
+            log_task_status(
+                status="RUNNING",
+                operation=self.operation,
+                start_time=self.start_time,
+                **self.kwargs
+            )
+            
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        status = "SUCCESS" if exc_type is None else "FAILED"
+        
+        # Log task completion with all accumulated metrics
+        log_task_status(
+            status=status,
+            operation=self.operation,
+            error=exc_val,
+            start_time=self.start_time,
+            **self.kwargs  # This includes any metrics added during execution
+        )
+        
+        return False  # Don't suppress exceptions
+    
+    def set_metrics(self, **metrics):
+        """Update metrics during task execution"""
+        self.kwargs.update(metrics)

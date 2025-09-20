@@ -1,0 +1,42 @@
+# # Table configuration for Unikargo data pipeline
+unikargo_tables:
+  raw_paths: # Paths to raw data files in ADLS (landing zone)
+    airports: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airports.csv"
+    airlines: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airlines.csv"
+    flights: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/flights.csv"
+    # local_run: # Local development
+    #   airports: "data/local_airports.csv"
+    #   airlines: "data/local_airlines.csv"
+    #   flights: "data/local_flights.csv"
+    # adls_run: # Databricks / ADLS
+    #   airports: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airports.csv"
+    #   airlines: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/airlines.csv"
+    #   flights: "abfss://medallion@adlsunikargodev.dfs.core.windows.net/raw/volumes/flights.csv"
+
+  airlines: # Airline dimension + airline-based aggregates
+    bronze: "unikargo_airline_bronze" # Raw ingested airline data
+    silver: "unikargo_dim_airline_silver" # Cleaned + conformed airline data
+    gold:
+      daily_performance: "unikargo_airline_performance" # Aggregates of airline on-time performance
+      cancellation_rates: "unikargo_cancellation_rates_airline" # Cancellation stats by airline
+      avg_delay_by_month: "unikargo_avg_delay_by_airline_month" # Trend of avg delays per airline by month
+
+  airports: # Airport dimension + airport-based aggregates
+    bronze: "unikargo_airport_bronze" # Raw ingested airport data
+    silver: "unikargo_dim_airport_silver" # Cleaned + enriched airport data
+    gold:
+      origin_performance: "unikargo_origin_airport_stats" # Flight performance when airport is origin
+      destination_performance: "unikargo_dest_airport_stats" # Flight performance when airport is destination
+      weekend_vs_weekday_performance: "unikargo_weekend_analysis" # Delay/cancellation behavior by weekday vs weekend
+      aircraft_utilization: "unikargo_aircraft_utilization" # How often aircraft types are used from airports
+
+  flights: # Fact table for flights + flight-based aggregates
+    bronze: "unikargo_flights_bronze" # Raw ingested flight data
+    silver: "unikargo_dim_flights_silver" # Cleaned + validated flight data
+    gold:
+      daily_summary: "unikargo_daily_flight_summary" # Daily flight totals, avg delay, etc.
+      route_analysis: "unikargo_route_analysis" # Performance across specific routes
+      seasonal_trends: "unikargo_seasonal_analysis" # Seasonal/quarterly flight patterns
+      delay_distribution: "unikargo_delay_distribution" # Distribution of delays (histogram style)
+      top_10_busiest_routes: "unikargo_top_10_busiest_routes" # Ranked busiest routes
+
